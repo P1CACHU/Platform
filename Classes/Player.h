@@ -9,14 +9,19 @@ class Player : public Sprite
 public:
 	
 	inline void setVelocity(Point value) { _velocity = value; }
+	inline void setForwardMarch(bool value) { _forwardMarch = value; }
+	inline void setMightAsWellJump(bool value) { _mightAsWellJump = value; }
+	inline void setOnGround(bool value) { _onGround = value; }
 	
-	void update(float dt);
-	cocos2d::Rect collisionBoundingBox();
-	
-private:
+	void updatePosition(float dt);
+	Rect collisionBoundingBox();
 	
 	Point _velocity;
 	Point _desiredPosition;
+	
+private:
+	
+	
 	bool _onGround;
 	bool _forwardMarch;
 	bool _mightAsWellJump;

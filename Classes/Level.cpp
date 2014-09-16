@@ -16,7 +16,7 @@ bool Level::init()
 	
 	CocosDenshion::SimpleAudioEngine::getInstance()->playBackgroundMusic("level1.mp3");
 	
-	cocos2d::LayerColor * sky = LayerColor::create(Color4B(100, 100, 250, 255));
+	LayerColor * sky = LayerColor::create(Color4B(100, 100, 250, 255));
 	this->addChild(sky);
 	
 	_map = TMXTiledMap::create("level1.tmx");
@@ -27,8 +27,16 @@ bool Level::init()
 	_player->setPosition(Point(100, 50));
 	_map->addChild(_player, 15);
 	
-//	walls = [map layerNamed:@"walls"];
-//	hazards = [map layerNamed:@"hazards"];
+	_walls = _map->getLayer("walls");
+	_coins = _map->getLayer("coins");
+	
+	_score = 0;
+	
+	auto listener = EventListenerTouchAllAtOnce::create();
+	listener->onTouchesBegan = CC_CALLBACK_2(Level::onTouchesBegan, this);
+	listener->onTouchesMoved = CC_CALLBACK_2(Level::onTouchesMoved, this);
+	listener->onTouchesEnded = CC_CALLBACK_2(Level::onTouchesEnded, this);
+	_eventDispatcher->addEventListenerWithSceneGraphPriority(listener, this);
 	
 	scheduleUpdate();
 	
@@ -37,23 +45,21 @@ bool Level::init()
 
 void Level::update(float dt)
 {
-	_player->update(dt);
-	/*
-	if (gameOver) {
+	if (_gameOver) {
 		return;
 	}
-	[player update:dt];
-	[self checkForWin];
-	[self checkForAndResolveCollisions:player];
-	[self handleHazardCollisions:player];
-	[self setViewpointCenter:player.position];
-	*/
+	
+	_player->updatePosition(dt);
+	checkForWin();
+	checkForAndResolveCollisions(_player);
+	handleCollectCoins(_player);
+	setViewpointCenter(_player->getPosition());
 }
 
 Point Level::tileCoordForPosition(Point position)
 {
 	float x = floor(position.x / _map->getTileSize().width);
-	float levelHeightInPixels = _map->getTileSize().height * _map->getTileSize().height;
+	float levelHeightInPixels = _map->getMapSize().height * _map->getTileSize().height;
 	float y = floor((levelHeightInPixels - position.y) / _map->getTileSize().height);
 	return Point(x, y);
 }
@@ -65,38 +71,223 @@ Rect Level::tileRectFromTileCoords(Point tileCoords)
 	return Rect(origin.x, origin.y, _map->getTileSize().width, _map->getTileSize().height);
 }
 
-vector<Level::Dictionary> Level::getSurroundingTilesAtPosition(Point position, TMXLayer * layer)
+__Array * Level::getSurroundingTilesAtPosition(Point position, TMXLayer * layer)
 {
-	Point plPos = this->tileCoordForPosition(position);
-	
-	vector<Level::Dictionary> gids;
+	__Array * gids = __Array::create();
+	Point plPos = tileCoordForPosition(position);
 	
 	for (int i = 0; i < 9; i++) {
 		int c = i % 3;
 		int r = (int)(i / 3);
 		Point tilePos = Point(plPos.x + (c - 1), plPos.y + (r - 1));
 		if (tilePos.y > (_map->getMapSize().height - 1)) {
-			//fallen in a hole
-//			gameOver(0);
+			gameOver(0);
 			return gids;
 		}
 		int tgid = layer->getTileGIDAt(tilePos);
 		Rect tileRect = this->tileRectFromTileCoords(tilePos);
-		Level::Dictionary tileDict;
-		tileDict.gid = tgid;
-		tileDict.x = tileRect.origin.x;
-		tileDict.y = tileRect.origin.y;
-		tileDict.tilePos = tilePos;
-		gids.push_back(tileDict);
+		
+		Gid * tileDict = new Gid(tgid, tileRect.origin.x, tileRect.origin.y, tilePos);
+		gids->addObject(tileDict);
 	}
-	/*
-	
-	[gids removeObjectAtIndex:4]; //7
-	[gids insertObject:[gids objectAtIndex:2] atIndex:6];
-	[gids removeObjectAtIndex:2];
-	[gids exchangeObjectAtIndex:4 withObjectAtIndex:6];
-	[gids exchangeObjectAtIndex:0 withObjectAtIndex:4];
-	
-	return (NSArray *)gids;*/
+	gids->removeObjectAtIndex(4);
+	gids->insertObject(gids->getObjectAtIndex(2), 6);
+	gids->removeObjectAtIndex(2);
+	gids->exchangeObjectAtIndex(4, 6);
+	gids->exchangeObjectAtIndex(0, 4);
+
 	return gids;
+}
+
+void Level::checkForAndResolveCollisions(Player * p)
+{
+	__Array * tiles = getSurroundingTilesAtPosition(p->getPosition(), _walls);
+	
+	if (_gameOver) {
+		return;
+	}
+	p->setOnGround(false);
+	
+	Ref* obj = nullptr;
+	CCARRAY_FOREACH(tiles, obj)
+	{
+		Gid * dic = dynamic_cast<Gid*>(obj);
+		Rect pRect = p->collisionBoundingBox();
+		
+		int gid = dic->_gid;
+		
+		if (gid) {
+			Rect tileRect = Rect(dic->_x, dic->_y, _map->getTileSize().width, _map->getTileSize().height); //5
+			if (pRect.intersectsRect(tileRect)) {
+				
+				Rect intersection = Rect(std::max(pRect.getMinX(), tileRect.getMinX()), std::max(pRect.getMinY(), tileRect.getMinY()), 0, 0);
+				intersection.size.width = std::min(pRect.getMaxX(), tileRect.getMaxX()) - intersection.getMinX();
+				intersection.size.height = std::min(pRect.getMaxY(), tileRect.getMaxY()) - intersection.getMinY();
+
+				int tileIndx = tiles->getIndexOfObject(dic);
+				
+				if (tileIndx == 0) {
+					//tile is directly below player
+					p->_desiredPosition = Point(p->_desiredPosition.x, p->_desiredPosition.y + intersection.size.height);
+					p->_velocity = Point(p->_velocity.x, 0.0);
+					p->setOnGround(true);
+				} else if (tileIndx == 1) {
+					//tile is directly above player
+					p->_desiredPosition = Point(p->_desiredPosition.x, p->_desiredPosition.y - intersection.size.height);
+					p->_velocity = Point(p->_velocity.x, 0.0);
+				} else if (tileIndx == 2) {
+					//tile is left of player
+					p->_desiredPosition = Point(p->_desiredPosition.x + intersection.size.width, p->_desiredPosition.y);
+				} else if (tileIndx == 3) {
+					//tile is right of player
+					p->_desiredPosition = Point(p->_desiredPosition.x - intersection.size.width, p->_desiredPosition.y);
+				} else {
+					if (intersection.size.width > intersection.size.height) {
+						//tile is diagonal, but resolving collision vertially
+						p->_velocity = Point(p->_velocity.x, 0.0);
+						float resolutionHeight;
+						if (tileIndx > 5) {
+							resolutionHeight = -intersection.size.height;
+							p->setOnGround(true);
+						} else {
+							resolutionHeight = intersection.size.height;
+						}
+						
+						p->_desiredPosition = Point(p->_desiredPosition.x, p->_desiredPosition.y + resolutionHeight );
+						
+					} else {
+						float resolutionWidth;
+						if (tileIndx == 6 || tileIndx == 4) {
+							resolutionWidth = intersection.size.width;
+						} else {
+							resolutionWidth = -intersection.size.width;
+						}
+						p->_desiredPosition = Point(p->_desiredPosition.x + resolutionWidth , p->_desiredPosition.y);
+						
+					}
+				}
+			}
+		}
+	}
+	p->setPosition(p->_desiredPosition);
+}
+
+void Level::handleCollectCoins(Player * p)
+{
+	__Array * tiles = getSurroundingTilesAtPosition(p->getPosition(), _coins);
+	Ref* obj = nullptr;
+	CCARRAY_FOREACH(tiles, obj)
+	{
+		Gid * dic = dynamic_cast<Gid*>(obj);
+		Rect tileRect = Rect(dic->_x, dic->_y, _map->getTileSize().width, _map->getTileSize().height);
+		Rect pRect = p->collisionBoundingBox();
+		
+		if (dic->_gid && pRect.intersectsRect(tileRect)) {
+			_coins->removeTileAt(dic->_tilePos);
+			_score += 1;
+		}
+	}
+}
+
+void Level::onTouchesBegan(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
+{
+	for (Touch * t : touches) {
+		Point touchLocation = convertTouchToNodeSpace(t);
+		if (touchLocation.x > 240) {
+			_player->setMightAsWellJump(true);
+		} else {
+			_player->setForwardMarch(true);
+		}
+	}
+}
+
+void Level::onTouchesMoved(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
+{
+	for (Touch * t : touches) {
+		Point touchLocation = convertTouchToNodeSpace(t);
+		
+		Point previousTouchLocation = t->getPreviousLocationInView();
+		Size screenSize = Director::getInstance()->getWinSize();
+		previousTouchLocation = Point(previousTouchLocation.x, screenSize.height - previousTouchLocation.y);
+		
+		if (touchLocation.x > 240 && previousTouchLocation.x <= 240) {
+			_player->setForwardMarch(false);
+			_player->setMightAsWellJump(true);
+		} else if (previousTouchLocation.x > 240 && touchLocation.x <= 240) {
+			_player->setForwardMarch(true);
+			_player->setMightAsWellJump(false);
+		}
+	}
+}
+
+void Level::onTouchesEnded(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
+{
+	for (Touch * t : touches) {
+		Point touchLocation = convertTouchToNodeSpace((Touch *)t);
+		if (touchLocation.x < 240) {
+			_player->setForwardMarch(false);
+		} else {
+			_player->setMightAsWellJump(false);
+		}
+	}
+}
+
+void Level::gameOver(bool won)
+{
+	_gameOver = true;
+	string gameText;
+	
+	if (won) {
+		gameText = "You Won!";
+	} else {
+		gameText = "You have Died!";
+		CocosDenshion::SimpleAudioEngine::getInstance()->playBackgroundMusic("hurt.wav");
+	}
+	
+	Label * diedLabel = Label::createWithSystemFont(gameText, "Marker Felt", 40.0f);
+	diedLabel->setPosition(240.0f, 200.0f);
+	
+	Label * scoreLabel = Label::createWithSystemFont(StringUtils::format("Your score is: %d", _score), "Marker Felt", 40.0f);
+	scoreLabel->setPosition(240.0f, 260.0f);
+	
+	MoveBy * slideIn = MoveBy::create(1.0f, Point(0, 250));
+	
+	MenuItemImage * replay = MenuItemImage::create("replay.png", "replay.png", CC_CALLBACK_0(Level::restart, this));
+	
+	Menu * menu = Menu::create(replay, NULL);
+	menu->setPosition(240.0f, -100.0f);
+	
+	addChild(menu);
+	addChild(diedLabel);
+	addChild(scoreLabel);
+	
+	menu->runAction(slideIn);
+}
+
+void Level::checkForWin()
+{
+	if (_player->getPosition().x > 3130.0) {
+		gameOver(1);
+	}
+}
+
+void Level::setViewpointCenter(Point position)
+{
+	Size winSize = Director::getInstance()->getWinSize();
+	
+	int x = MAX(position.x, winSize.width / 2);
+	int y = MAX(position.y, winSize.height / 2);
+	x = MIN(x, (_map->getMapSize().width * _map->getTileSize().width) - winSize.width / 2);
+	y = MIN(y, (_map->getMapSize().height * _map->getTileSize().height) - winSize.height / 2);
+	Point actualPosition = Point(x, y);
+	
+	Point centerOfView = Point(winSize.width / 2, winSize.height / 2);
+	Point viewPoint = centerOfView - actualPosition;
+	_map->setPosition(viewPoint);
+}
+
+void Level::restart()
+{
+	_score = 0;
+	Director::getInstance()->replaceScene(Level::createScene());
 }

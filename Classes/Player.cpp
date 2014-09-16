@@ -1,7 +1,7 @@
 #import "Player.h"
 #import "SimpleAudioEngine.h"
 
-void Player::update(float dt)
+void Player::updatePosition(float dt)
 {
 	Point jumpForce = Point(0.0, 310.0);
 	float jumpCutoff = 150.0;
@@ -38,8 +38,8 @@ void Player::update(float dt)
 Rect Player::collisionBoundingBox()
 {
 //	Rect collisionBox = CGRectInset(getBoundingBox(), 3, 0);
-	//collisionBox = CGRectOffset(collisionBox, 0, -2);
 	Point diff = _desiredPosition - _position;
 	//Rect returnBoundingBox = CGRectOffset(collisionBox, diff.x, diff.y);
 	//return returnBoundingBox;
+	return getBoundingBox();
 }
