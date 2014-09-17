@@ -41,7 +41,14 @@ static AppDelegate s_sharedApplication;
     // Override point for customization after application launch.
 
     // Add the view controller's view to the window and display.
-    window = [[UIWindow alloc] initWithFrame: [[UIScreen mainScreen] bounds]];
+	UIScreen *screen = [UIScreen mainScreen];
+	CGRect bounds = [screen bounds];
+	if ([screen respondsToSelector:@selector(fixedCoordinateSpace)]) {
+		if (UIInterfaceOrientationIsPortrait([UIApplication sharedApplication].statusBarOrientation)) {
+			bounds =  CGRectMake(bounds.origin.x, bounds.origin.y, bounds.size.height, bounds.size.width);
+		}
+	}
+    window = [[UIWindow alloc] initWithFrame: bounds];
 
     // Init the CCEAGLView
     CCEAGLView *eaglView = [CCEAGLView viewWithFrame: [window bounds]

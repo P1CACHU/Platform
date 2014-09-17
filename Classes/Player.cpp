@@ -37,9 +37,5 @@ void Player::updatePosition(float dt)
 
 Rect Player::collisionBoundingBox()
 {
-//	Rect collisionBox = CGRectInset(getBoundingBox(), 3, 0);
-	Point diff = _desiredPosition - _position;
-	//Rect returnBoundingBox = CGRectOffset(collisionBox, diff.x, diff.y);
-	//return returnBoundingBox;
 	return getBoundingBox();
 }
