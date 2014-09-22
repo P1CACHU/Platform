@@ -31,6 +31,7 @@ bool Level::init()
 	_coins = _map->getLayer("coins");
 	
 	_score = 0;
+	_scoreCounter = 0;
 	
 	auto listener = EventListenerTouchAllAtOnce::create();
 	listener->onTouchesBegan = CC_CALLBACK_2(Level::onTouchesBegan, this);
@@ -191,9 +192,11 @@ void Level::handleCollectCoins(Player * p)
 
 void Level::onTouchesBegan(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
 {
+	Size winSize = Director::getInstance()->getWinSize();
+	
 	for (Touch * t : touches) {
 		Point touchLocation = convertTouchToNodeSpace(t);
-		if (touchLocation.x > 240) {
+		if (touchLocation.x > (winSize.width / 2)) {
 			_player->setMightAsWellJump(true);
 		} else {
 			_player->setForwardMarch(true);
@@ -203,6 +206,8 @@ void Level::onTouchesBegan(const std::vector<Touch *> &touches, cocos2d::Event *
 
 void Level::onTouchesMoved(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
 {
+	Size winSize = Director::getInstance()->getWinSize();
+	
 	for (Touch * t : touches) {
 		Point touchLocation = convertTouchToNodeSpace(t);
 		
@@ -210,10 +215,10 @@ void Level::onTouchesMoved(const std::vector<Touch *> &touches, cocos2d::Event *
 		Size screenSize = Director::getInstance()->getWinSize();
 		previousTouchLocation = Point(previousTouchLocation.x, screenSize.height - previousTouchLocation.y);
 		
-		if (touchLocation.x > 240 && previousTouchLocation.x <= 240) {
+		if (touchLocation.x > (winSize.width / 2) && previousTouchLocation.x <= (winSize.width / 2)) {
 			_player->setForwardMarch(false);
 			_player->setMightAsWellJump(true);
-		} else if (previousTouchLocation.x > 240 && touchLocation.x <= 240) {
+		} else if (previousTouchLocation.x > (winSize.width / 2) && touchLocation.x <= (winSize.width / 2)) {
 			_player->setForwardMarch(true);
 			_player->setMightAsWellJump(false);
 		}
@@ -222,9 +227,11 @@ void Level::onTouchesMoved(const std::vector<Touch *> &touches, cocos2d::Event *
 
 void Level::onTouchesEnded(const std::vector<Touch *> &touches, cocos2d::Event *unused_event)
 {
+	Size winSize = Director::getInstance()->getWinSize();
+	
 	for (Touch * t : touches) {
 		Point touchLocation = convertTouchToNodeSpace((Touch *)t);
-		if (touchLocation.x < 240) {
+		if (touchLocation.x < (winSize.width / 2)) {
 			_player->setForwardMarch(false);
 		} else {
 			_player->setMightAsWellJump(false);
@@ -234,32 +241,38 @@ void Level::onTouchesEnded(const std::vector<Touch *> &touches, cocos2d::Event *
 
 void Level::gameOver(bool won)
 {
+	Size winSize = Director::getInstance()->getWinSize();
+	Point centerOfScreen = Point(winSize.width / 2, winSize.height / 2);
+	
 	_gameOver = true;
 	string gameText;
 	
 	if (won) {
 		gameText = "You Won!";
 	} else {
-		gameText = "You have Died!";
+		gameText = "You Lose!";
 		CocosDenshion::SimpleAudioEngine::getInstance()->playBackgroundMusic("hurt.wav");
 	}
 	
-	Label * diedLabel = Label::createWithSystemFont(gameText, "Marker Felt", 40.0f);
-	diedLabel->setPosition(240.0f, 200.0f);
+	Label * diedLabel = Label::createWithSystemFont(gameText, "Helvetica", 40.0f);
+	diedLabel->setPosition(centerOfScreen + Point(0, 100));
 	
-	Label * scoreLabel = Label::createWithSystemFont(StringUtils::format("Your score is: %d", _score), "Marker Felt", 40.0f);
-	scoreLabel->setPosition(240.0f, 260.0f);
+	_scoreLabel = Label::createWithSystemFont("Your score is: 0", "Helvetica", 40.0f);
+	_scoreLabel->setPosition(centerOfScreen);
 	
-	MoveBy * slideIn = MoveBy::create(1.0f, Point(0, 250));
+	MoveBy * slideIn = MoveBy::create(0.2f, Point(0, winSize.height / 2 - 100));
 	
 	MenuItemImage * replay = MenuItemImage::create("replay.png", "replay.png", CC_CALLBACK_0(Level::restart, this));
 	
 	Menu * menu = Menu::create(replay, NULL);
-	menu->setPosition(240.0f, -100.0f);
+	menu->setPosition(Point(winSize.width / 2, 0));
 	
 	addChild(menu);
 	addChild(diedLabel);
-	addChild(scoreLabel);
+	addChild(_scoreLabel);
+	
+	if (_score > 0)
+		schedule(schedule_selector(Level::updateScore), 0.05f);
 	
 	menu->runAction(slideIn);
 }
@@ -283,11 +296,21 @@ void Level::setViewpointCenter(Point position)
 	
 	Point centerOfView = Point(winSize.width / 2, winSize.height / 2);
 	Point viewPoint = centerOfView - actualPosition;
-	_map->setPosition(viewPoint);
+	_map->setPosition(viewPoint - Point(0, winSize.height / 2));
 }
 
 void Level::restart()
 {
-	_score = 0;
 	Director::getInstance()->replaceScene(Level::createScene());
+}
+
+void Level::updateScore(float dt)
+{
+	_scoreCounter += 1;
+	
+	_scoreLabel->setString(StringUtils::format("Your score is: %d", _scoreCounter));
+	
+	if (_scoreCounter == _score) {
+		unscheduleAllSelectors();
+	}
 }
