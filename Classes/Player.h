@@ -21,10 +21,9 @@ public:
 	
 private:
 	
-	
-	bool _onGround;
-	bool _forwardMarch;
-	bool _mightAsWellJump;
+	bool _onGround = true;
+	bool _forwardMarch = false;
+	bool _mightAsWellJump = false;
 };
 
 #endif /* defined(__Platform__Player__) */
