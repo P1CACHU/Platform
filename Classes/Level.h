@@ -37,8 +37,10 @@ private:
 	TMXLayer * _walls;
 	TMXLayer * _coins;
 	Player * _player;
+	Label * _scoreLabel;
 	bool _gameOver;
 	int _score;
+	int _scoreCounter;
 	
 	void update(float dt);
 	Point tileCoordForPosition(Point position);
@@ -56,6 +58,8 @@ private:
 	void handleCollectCoins(Player * p);
 	__Array * getSurroundingTilesAtPosition(Point position, TMXLayer * layer);
 	void checkForAndResolveCollisions(Player * p);
+	
+	void updateScore(float dt);
 };
 
 #endif /* defined(__Platform__Level__) */

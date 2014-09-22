@@ -31,6 +31,7 @@ bool Level::init()
 	_coins = _map->getLayer("coins");
 	
 	_score = 0;
+	_scoreCounter = 0;
 	
 	auto listener = EventListenerTouchAllAtOnce::create();
 	listener->onTouchesBegan = CC_CALLBACK_2(Level::onTouchesBegan, this);
@@ -256,8 +257,8 @@ void Level::gameOver(bool won)
 	Label * diedLabel = Label::createWithSystemFont(gameText, "Helvetica", 40.0f);
 	diedLabel->setPosition(centerOfScreen + Point(0, 100));
 	
-	Label * scoreLabel = Label::createWithSystemFont(StringUtils::format("Your score is: %d", _score), "Helvetica", 40.0f);
-	scoreLabel->setPosition(centerOfScreen);
+	_scoreLabel = Label::createWithSystemFont("Your score is: 0", "Helvetica", 40.0f);
+	_scoreLabel->setPosition(centerOfScreen);
 	
 	MoveBy * slideIn = MoveBy::create(0.2f, Point(0, winSize.height / 2 - 100));
 	
@@ -268,7 +269,10 @@ void Level::gameOver(bool won)
 	
 	addChild(menu);
 	addChild(diedLabel);
-	addChild(scoreLabel);
+	addChild(_scoreLabel);
+	
+	if (_score > 0)
+		schedule(schedule_selector(Level::updateScore), 0.05f);
 	
 	menu->runAction(slideIn);
 }
@@ -297,6 +301,16 @@ void Level::setViewpointCenter(Point position)
 
 void Level::restart()
 {
-	_score = 0;
 	Director::getInstance()->replaceScene(Level::createScene());
+}
+
+void Level::updateScore(float dt)
+{
+	_scoreCounter += 1;
+	
+	_scoreLabel->setString(StringUtils::format("Your score is: %d", _scoreCounter));
+	
+	if (_scoreCounter == _score) {
+		unscheduleAllSelectors();
+	}
 }
